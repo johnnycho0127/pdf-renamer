@@ -61,13 +61,11 @@
                     </label>
                     <input type="file" id="file-input" class="hidden" accept=".pdf">
                 </div>
-                <button id="process-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center" disabled>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd" />
-                    </svg>
-                    <span id="process-button-text">Extract Title</span>
-                    <div id="loader" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-6 w-6 ml-3 hidden"></div>
-                </button>
+            </div>
+
+            <div id="loader-container" class="mt-6 text-center hidden">
+                <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mx-auto"></div>
+                <p class="mt-2 text-gray-600 dark:text-gray-400">Extracting title...</p>
             </div>
 
             <div id="result" class="mt-6 hidden">
@@ -99,17 +97,13 @@
         const fileInput = document.getElementById('file-input');
         const fileInputLabel = document.getElementById('file-input-label');
         const fileNameSpan = document.getElementById('file-name');
-        const processButton = document.getElementById('process-button');
-        const processButtonText = document.getElementById('process-button-text');
-        const loader = document.getElementById('loader');
+        const loaderContainer = document.getElementById('loader-container');
         const resultDiv = document.getElementById('result');
         const pdfTitleSpan = document.getElementById('pdf-title');
         const pdfFilenameSpan = document.getElementById('pdf-filename');
         const downloadButton = document.getElementById('download-button');
         const errorMessageDiv = document.getElementById('error-message');
         const errorTextSpan = document.getElementById('error-text');
-
-        let selectedFile = null;
 
         // File input and drag & drop event handlers
         fileInputLabel.addEventListener('click', () => fileInput.click());
@@ -136,34 +130,24 @@
 
         function handleFile(file) {
             if (file && file.type === 'application/pdf') {
-                selectedFile = file;
                 fileNameSpan.textContent = `Selected file: ${file.name}`;
-                processButton.disabled = false;
                 hideError();
                 resultDiv.classList.add('hidden');
+                processFile(file); // Process the file immediately upon selection
             } else {
                 showError('Only PDF files can be selected.');
-                selectedFile = null;
                 fileNameSpan.textContent = '';
-                processButton.disabled = true;
             }
             // Reset the input value to allow selecting the same file again.
             fileInput.value = null;
         }
 
-        // Event listener for the process button
-        processButton.addEventListener('click', async () => {
-            if (!selectedFile) {
-                showError('Please select a PDF file first.');
-                return;
-            }
-
-            // Reset UI
-            hideError();
+        // File processing function
+        async function processFile(file) {
+            // Reset UI and show loader
+            loaderContainer.classList.remove('hidden');
             resultDiv.classList.add('hidden');
-            processButton.disabled = true;
-            processButtonText.textContent = 'Processing...';
-            loader.classList.remove('hidden');
+            hideError();
 
             try {
                 const reader = new FileReader();
@@ -181,7 +165,7 @@
                         
                         // 2. If the title is empty or just whitespace, use the original filename (without extension) as the title.
                         if (!title || !title.trim()) {
-                            title = selectedFile.name.replace(/\.pdf$/i, '');
+                            title = file.name.replace(/\.pdf$/i, '');
                         }
                         
                         // Sanitize the title to create a valid filename.
@@ -194,34 +178,33 @@
                         
                         // Set up the download button
                         downloadButton.onclick = () => {
-                            downloadFile(selectedFile, newFilename);
+                            downloadFile(file, newFilename);
                         };
                     } catch (error) {
                         console.error('Error during PDF processing:', error);
-                        showError(`An error occurred while reading the PDF: ${error.message}`);
+                        if (error.name === 'PasswordException') {
+                            showError('This PDF is password-protected and cannot be processed.');
+                        } else if (error.name === 'InvalidPDFException') {
+                            showError('The selected file is not a valid or supported PDF.');
+                        } else {
+                            showError(`An error occurred while reading the PDF: ${error.message}`);
+                        }
                     } finally {
-                        // Restore button state
-                        processButton.disabled = false;
-                        processButtonText.textContent = 'Extract Title';
-                        loader.classList.add('hidden');
+                        loaderContainer.classList.add('hidden');
                     }
                 };
                 reader.onerror = () => {
                     showError('Failed to read the file.');
-                    processButton.disabled = false;
-                    processButtonText.textContent = 'Extract Title';
-                    loader.classList.add('hidden');
+                    loaderContainer.classList.add('hidden');
                 };
-                reader.readAsArrayBuffer(selectedFile);
+                reader.readAsArrayBuffer(file);
 
             } catch (error) {
                 console.error('Error starting file processing:', error);
                 showError(`An error occurred while processing the file: ${error.message}`);
-                processButton.disabled = false;
-                processButtonText.textContent = 'Extract Title';
-                loader.classList.add('hidden');
+                loaderContainer.classList.add('hidden');
             }
-        });
+        }
         
         function downloadFile(blob, filename) {
             const url = URL.createObjectURL(blob);
